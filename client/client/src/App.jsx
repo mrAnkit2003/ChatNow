@@ -311,7 +311,8 @@ function ChatPage() {
                 <input
                   type="text"
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)} // <-- SYNTAX ERROR FIXED HERE
+                  // --- *** 1. SYNTAX ERROR FIXED HERE *** ---
+                  onChange={(e) => setMessage(e.target.value)} 
                   placeholder={`Message ${selectedUser.username}...`}
                 />
                 <button type="submit">Send</button>
