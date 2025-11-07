@@ -183,7 +183,8 @@
 .auth-toggle {
   background: none;
   border: none;
-  color: var(--accent-primary-hover);
+  /* color: var(--accent-primary-hover); */
+  color: var(--text-primary);
   cursor: pointer;
   font-size: 0.9rem;
   padding: 0;

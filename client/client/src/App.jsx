@@ -2,10 +2,10 @@ import { useState, useEffect, createContext, useContext, useRef } from 'react';
 import { io } from 'socket.io-client';
 import './App.css'; 
 
-// --- *** Production-Ready URL (No changes) *** ---
+
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5001';
 
-// --- 1. SETUP SOCKET & AUTH CONTEXT (No changes) ---
+// SETUP SOCKET & AUTH CONTEXT 
 const socket = io(SERVER_URL);
 const AuthContext = createContext();
 
@@ -50,11 +50,11 @@ const useAuth = () => {
   return useContext(AuthContext);
 };
 
-// --- 2. THE MAIN APP ---
+// --- MAIN APP --- 
 function App() {
   return (
     <AuthProvider>
-      {/* --- NEW: Removed .App-header wrapper --- */}
+      
       <div className="App">
         <AppContent />
       </div>
@@ -62,10 +62,9 @@ function App() {
   );
 }
 
-// --- 3. APP CONTENT (Handles auth state) ---
+//  APP CONTENT to Handle auth state ---
 function AppContent() {
   const { user } = useAuth();
-  // --- NEW: Wraps AuthPage in a centering div ---
   return user ? <ChatPage /> : (
     <div className="auth-page-wrapper">
       <AuthPage />
@@ -73,7 +72,7 @@ function AppContent() {
   );
 }
 
-// --- 4. AUTH PAGE (Login/Register) (No logic changes) ---
+// --- 4. AUTH PAGE (Login/Register) ---
 function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
@@ -145,7 +144,7 @@ function AuthPage() {
 }
 
 
-// --- 5. CHAT PAGE (With new structure) ---
+// --- CHAT PAGE ---
 function ChatPage() {
   const [isConnected, setIsConnected] = useState(socket.connected);
   const [message, setMessage] = useState('');
@@ -161,7 +160,7 @@ function ChatPage() {
   };
   useEffect(scrollToBottom, [messages]);
 
-  // Fetch all users (No logic changes)
+  // Fetch all users 
   useEffect(() => {
     async function fetchUsers() {
       try {
@@ -182,7 +181,7 @@ function ChatPage() {
     }
   }, [token]);
 
-  // Fetch message history (No logic changes)
+  // Fetch message history 
   useEffect(() => {
     if (selectedUser) {
       async function fetchMessages() {
@@ -204,7 +203,7 @@ function ChatPage() {
   }, [selectedUser, token]);
 
 
-  // Main effect for socket listeners (No logic changes)
+  // Main effect for socket listeners 
   useEffect(() => {
     function onConnect() {
       setIsConnected(true);
@@ -241,7 +240,7 @@ function ChatPage() {
     };
   }, [selectedUser, token]); 
 
-  // Send message function (No logic changes)
+  // Send message function 
   const sendMessage = (e) => {
     e.preventDefault();
     if (message.trim() && selectedUser) { 
@@ -256,9 +255,9 @@ function ChatPage() {
   };
 
   return (
-    // --- NEW: Full page container ---
+    // --- Full page container ---
     <div className="chat-page-container">
-      {/* --- NEW: Header structure --- */}
+     
       <div className="header-bar">
         <h1>ChatNow</h1>
         <div className="header-info">
@@ -275,7 +274,7 @@ function ChatPage() {
         </div>
       </div>
       
-      {/* --- This is the same chat layout from before --- */}
+      
       <div className="chat-layout">
         <div className="user-list">
           <h2>Users</h2>
