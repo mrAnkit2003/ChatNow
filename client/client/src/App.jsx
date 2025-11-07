@@ -2,13 +2,11 @@ import { useState, useEffect, createContext, useContext, useRef } from 'react';
 import { io } from 'socket.io-client';
 import './App.css'; 
 
-// --- *** NEW: Production-Ready URL *** ---
-// We'll get the server URL from a Vite environment variable
-// Fallback to localhost for development
+// --- *** Production-Ready URL (No changes) *** ---
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5001';
 
-// --- 1. SETUP SOCKET & AUTH CONTEXT ---
-const socket = io(SERVER_URL); // <-- 1. FIX HERE
+// --- 1. SETUP SOCKET & AUTH CONTEXT (No changes) ---
+const socket = io(SERVER_URL);
 const AuthContext = createContext();
 
 function AuthProvider({ children }) {
@@ -39,7 +37,6 @@ function AuthProvider({ children }) {
     setToken(null);
     localStorage.removeItem('chatUser');
     localStorage.removeItem('chatToken');
-    // The server 'disconnect' event will handle cleaning up the socket map
   };
 
   return (
@@ -57,10 +54,9 @@ const useAuth = () => {
 function App() {
   return (
     <AuthProvider>
+      {/* --- NEW: Removed .App-header wrapper --- */}
       <div className="App">
-        <header className="App-header">
-          <AppContent />
-        </header>
+        <AppContent />
       </div>
     </AuthProvider>
   );
@@ -69,10 +65,15 @@ function App() {
 // --- 3. APP CONTENT (Handles auth state) ---
 function AppContent() {
   const { user } = useAuth();
-  return user ? <ChatPage /> : <AuthPage />;
+  // --- NEW: Wraps AuthPage in a centering div ---
+  return user ? <ChatPage /> : (
+    <div className="auth-page-wrapper">
+      <AuthPage />
+    </div>
+  );
 }
 
-// --- 4. AUTH PAGE (Login/Register) ---
+// --- 4. AUTH PAGE (Login/Register) (No logic changes) ---
 function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
@@ -90,7 +91,7 @@ function AuthPage() {
       return;
     }
     const endpoint = isLogin ? '/login' : '/register';
-    const url = `${SERVER_URL}${endpoint}`; // <-- 2. FIX HERE
+    const url = `${SERVER_URL}${endpoint}`;
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -144,16 +145,14 @@ function AuthPage() {
 }
 
 
-// --- 5. CHAT PAGE (With Online Status Added) ---
+// --- 5. CHAT PAGE (With new structure) ---
 function ChatPage() {
   const [isConnected, setIsConnected] = useState(socket.connected);
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
-  
   const [onlineUsers, setOnlineUsers] = useState([]);
-  
   const { user, token, logout } = useAuth();
   const messagesEndRef = useRef(null);
 
@@ -162,11 +161,11 @@ function ChatPage() {
   };
   useEffect(scrollToBottom, [messages]);
 
-  // Fetch all users
+  // Fetch all users (No logic changes)
   useEffect(() => {
     async function fetchUsers() {
       try {
-        const response = await fetch(`${SERVER_URL}/api/users`, { // <-- 3. FIX HERE
+        const response = await fetch(`${SERVER_URL}/api/users`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!response.ok) {
@@ -183,12 +182,12 @@ function ChatPage() {
     }
   }, [token]);
 
-  // Fetch message history
+  // Fetch message history (No logic changes)
   useEffect(() => {
     if (selectedUser) {
       async function fetchMessages() {
         try {
-          const response = await fetch(`${SERVER_URL}/api/messages/${selectedUser._id}`, { // <-- 4. FIX HERE
+          const response = await fetch(`${SERVER_URL}/api/messages/${selectedUser._id}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (!response.ok) {
@@ -205,7 +204,7 @@ function ChatPage() {
   }, [selectedUser, token]);
 
 
-  // Main effect for socket listeners
+  // Main effect for socket listeners (No logic changes)
   useEffect(() => {
     function onConnect() {
       setIsConnected(true);
@@ -242,6 +241,7 @@ function ChatPage() {
     };
   }, [selectedUser, token]); 
 
+  // Send message function (No logic changes)
   const sendMessage = (e) => {
     e.preventDefault();
     if (message.trim() && selectedUser) { 
@@ -256,23 +256,27 @@ function ChatPage() {
   };
 
   return (
-    <>
+    // --- NEW: Full page container ---
+    <div className="chat-page-container">
+      {/* --- NEW: Header structure --- */}
       <div className="header-bar">
         <h1>ChatNow</h1>
-        <p>
-          Server:
-          {isConnected ? (
-            <span className="status-on">Connected</span>
-          ) : (
-            <span className="status-off">Disconnected</span>
-          )}
-        </p>
-        <span className="welcome-user">Welcome, {user.username}!</span>
-        <button className="logout-button" onClick={logout}>Logout</button>
+        <div className="header-info">
+          <p>
+            Server:
+            {isConnected ? (
+              <span className="status-on">Connected</span>
+            ) : (
+              <span className="status-off">Disconnected</span>
+            )}
+          </p>
+          <span className="welcome-user">Welcome, {user.username}!</span>
+          <button className="logout-button" onClick={logout}>Logout</button>
+        </div>
       </div>
       
+      {/* --- This is the same chat layout from before --- */}
       <div className="chat-layout">
-
         <div className="user-list">
           <h2>Users</h2>
           {users.map((u) => (
@@ -293,7 +297,7 @@ function ChatPage() {
           {selectedUser ? (
             <>
               <div className="chat-header">
-                <h3>Chat with {selectedUser.username}</h3>
+                <h3> {selectedUser.username}</h3>
               </div>
               <div className="message-list">
                 {messages.map((msg, index) => (
@@ -301,7 +305,7 @@ function ChatPage() {
                     key={msg._id || index}
                     className={`message ${msg.senderId === user.id ? 'mine' : 'theirs'}`}
                   >
-                    <span className="message-author">{msg.senderUsername}</span>
+                    {/* <span className="message-author">{msg.senderUsername}</span> */}
                     <span className="message-text">{msg.text}</span>
                   </div>
                 ))}
@@ -311,11 +315,10 @@ function ChatPage() {
                 <input
                   type="text"
                   value={message}
-                  // --- *** 1. SYNTAX ERROR FIXED HERE *** ---
-                  onChange={(e) => setMessage(e.target.value)} 
+                  onChange={(e) => setMessage(e.target.value)}
                   placeholder={`Message ${selectedUser.username}...`}
                 />
-                <button type="submit">Send</button>
+                <button typeType="submit">Send</button>
               </form>
             </>
           ) : (
@@ -325,7 +328,7 @@ function ChatPage() {
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

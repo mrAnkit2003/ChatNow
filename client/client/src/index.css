@@ -4,8 +4,7 @@
   font-weight: 400;
 
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color: rgba(255, 255, 255, 0.9);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -22,19 +21,21 @@ a:hover {
   color: #535bf2;
 }
 
-/* --- BODY FIX --- */
+/* --- BODY --- */
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background: linear-gradient(to bottom right, #1a202c, #2d3748);
 }
-/* --- END BODY FIX --- */
+
 
 
 h1 {
   font-size: 3.2em;
   line-height: 1.1;
 }
+
 
 button {
   border-radius: 8px;
@@ -43,12 +44,15 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
+  background-color: #38B2AC; 
+  color: #1A202C; 
+  font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.25s;
+  transition: all 0.25s;
 }
 button:hover {
-  border-color: #646cff;
+  border-color: #4FD1C5;
+  background-color: #4FD1C5; 
 }
 button:focus,
 button:focus-visible {
