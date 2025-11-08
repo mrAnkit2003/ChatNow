@@ -2,7 +2,6 @@ import { useState, useEffect, createContext, useContext, useRef } from 'react';
 import { io } from 'socket.io-client';
 import './App.css'; 
 
-
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5001';
 
 // SETUP SOCKET & AUTH CONTEXT 
@@ -25,11 +24,16 @@ function AuthProvider({ children }) {
   }, []);
 
   const login = (userData, userToken) => {
-    setUser(userData);
+    setUser(userData); 
     setToken(userToken);
     localStorage.setItem('chatUser', JSON.stringify(userData));
     localStorage.setItem('chatToken', userToken);
     socket.emit('authenticate', userToken);
+  };
+
+  const updateUser = (newUserData) => {
+    setUser(newUserData);
+    localStorage.setItem('chatUser', JSON.stringify(newUserData));
   };
 
   const logout = () => {
@@ -40,7 +44,7 @@ function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout }}>
+    <AuthContext.Provider value={{ user, token, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
@@ -54,7 +58,6 @@ const useAuth = () => {
 function App() {
   return (
     <AuthProvider>
-      
       <div className="App">
         <AppContent />
       </div>
@@ -102,7 +105,9 @@ function AuthPage() {
         throw new Error(data.message || "Something went wrong");
       }
       if (isLogin) {
-        login(data.user, data.token);
+        // --- *** THIS IS THE BUG FIX *** ---
+        // It now correctly passes both the user and the token
+        login(data.user, data.token); 
       } else {
         setMessage("Registration successful! Please login.");
         setIsLogin(true);
@@ -144,7 +149,7 @@ function AuthPage() {
 }
 
 
-// --- CHAT PAGE ---
+// --- CHAT PAGE (With Avatar Upload Logic) ---
 function ChatPage() {
   const [isConnected, setIsConnected] = useState(socket.connected);
   const [message, setMessage] = useState('');
@@ -152,8 +157,10 @@ function ChatPage() {
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
-  const { user, token, logout } = useAuth();
+  const { user, token, logout, updateUser } = useAuth();
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [uploadError, setUploadError] = useState('');
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -179,7 +186,7 @@ function ChatPage() {
     if (token) {
       fetchUsers();
     }
-  }, [token]);
+  }, [token, user.avatarUrl]); // Re-fetch if our avatar changes
 
   // Fetch message history 
   useEffect(() => {
@@ -254,9 +261,56 @@ function ChatPage() {
     }
   };
 
+  const handleAvatarUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    setUploadError('');
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      
+      try {
+        const response = await fetch(`${SERVER_URL}/api/upload-avatar`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ dataUrl })
+        });
+        
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.message || 'Upload failed');
+        }
+        updateUser(data.user);
+
+      } catch (err) {
+        setUploadError(err.message);
+      }
+    };
+    reader.onerror = () => {
+      setUploadError('Failed to read file.');
+    };
+  };
+  
+  const getPlaceholderAvatar = (username) => {
+    const firstLetter = username ? username[0].toUpperCase() : '?';
+    return `https://placehold.co/100x100/4A5568/E2E8F0?text=${firstLetter}`;
+  };
+
   return (
-    // --- Full page container ---
     <div className="chat-page-container">
+      
+      <input 
+        type="file" 
+        accept="image/png, image/jpeg"
+        style={{ display: 'none' }}
+        ref={fileInputRef}
+        onChange={handleAvatarUpload}
+      />
      
       <div className="header-bar">
         <h1>ChatNow</h1>
@@ -269,7 +323,19 @@ function ChatPage() {
               <span className="status-off">Disconnected</span>
             )}
           </p>
-          <span className="welcome-user">Welcome, {user.username}!</span>
+
+          <div className="header-profile">
+            <img 
+              src={user.avatarUrl || getPlaceholderAvatar(user.username)} 
+              alt="Your avatar" 
+              className="avatar-img small"
+              onClick={() => fileInputRef.current.click()} 
+              title="Click to change avatar"
+            />
+            <span className="welcome-user">Welcome, {user.username}!</span>
+          </div>
+          {uploadError && <span className="auth-error small">{uploadError}</span>}
+
           <button className="logout-button" onClick={logout}>Logout</button>
         </div>
       </div>
@@ -284,6 +350,11 @@ function ChatPage() {
               className={`user-item ${selectedUser?._id === u._id ? 'selected' : ''}`}
               onClick={() => setSelectedUser(u)}
             >
+              <img 
+                src={u.avatarUrl || getPlaceholderAvatar(u.username)} 
+                alt={`${u.username}'s avatar`}
+                className="avatar-img medium"
+              />
               <span className="username-span">{u.username}</span>
               {onlineUsers.includes(u._id) && (
                 <span className="online-indicator"></span>
@@ -296,7 +367,12 @@ function ChatPage() {
           {selectedUser ? (
             <>
               <div className="chat-header">
-                <h3> {selectedUser.username}</h3>
+                <img 
+                  src={selectedUser.avatarUrl || getPlaceholderAvatar(selectedUser.username)}
+                  alt={`${selectedUser.username}'s avatar`}
+                  className="avatar-img medium"
+                />
+                <h3>{selectedUser.username}</h3>
               </div>
               <div className="message-list">
                 {messages.map((msg, index) => (
@@ -304,7 +380,6 @@ function ChatPage() {
                     key={msg._id || index}
                     className={`message ${msg.senderId === user.id ? 'mine' : 'theirs'}`}
                   >
-                    {/* <span className="message-author">{msg.senderUsername}</span> */}
                     <span className="message-text">{msg.text}</span>
                   </div>
                 ))}
@@ -317,11 +392,19 @@ function ChatPage() {
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder={`Message ${selectedUser.username}...`}
                 />
-                <button typeType="submit">Send</button>
+                {/* --- *** BUG FIX: Was typeType="submit" *** --- */}
+                <button type="submit">Send</button>
               </form>
             </>
           ) : (
             <div className="no-chat-selected">
+              <img 
+                src={user.avatarUrl || getPlaceholderAvatar(user.username)} 
+                alt="Your avatar" 
+                className="avatar-img large"
+                onClick={() => fileInputRef.current.click()}
+                title="Click to change avatar"
+              />
               <h2>Select a user to start chatting</h2>
             </div>
           )}

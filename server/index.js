@@ -6,21 +6,31 @@ import mongoose from 'mongoose';
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { v2 as cloudinary } from 'cloudinary'; 
 
 // --- App & Server Setup ---
 const app = express();
 const server = createServer(app);
 
-// --- *** NEW: Production-Ready URLs *** ---
-// We'll get the client URL from an environment variable
-// Fallback to localhost for development
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+// --- *** NEW: Configure Cloudinary *** ---
+// This uses the new variables from your .env file
+cloudinary.config({ 
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME, 
+  api_key: process.env.CLOUDINARY_API_KEY, 
+  api_secret: process.env.CLOUDINARY_API_SECRET 
+});
 
+// --- *** NEW: Increase body limit for image data URLs *** ---
+// We need this to send the image data from the client to the server
+app.use(express.json({ limit: '50mb' })); 
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// --- Production-Ready URLs ---
+const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 app.use(cors({
-  origin: CLIENT_URL, // Use the variable here
+  origin: CLIENT_URL,
   methods: ["GET", "POST"]
 }));
-app.use(express.json());
 
 // --- Database Connection ---
 const MONGO_URI = process.env.MONGO_URI;
@@ -28,13 +38,16 @@ mongoose.connect(MONGO_URI)
   .then(() => console.log('MongoDB connected successfully.'))
   .catch((err) => console.error('MongoDB connection error:', err));
 
-// --- Database Schemas (Unchanged) ---
+// --- Database Schemas ---
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
-  password: { type: String, required: true }
+  password: { type: String, required: true },
+  // --- *** NEW: Add avatarUrl field *** ---
+  avatarUrl: { type: String, default: '' } // Will store the URL from Cloudinary
 });
 const User = mongoose.model('User', userSchema);
 
+// (Message Schema is unchanged)
 const messageSchema = new mongoose.Schema({
   senderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   recipientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -60,8 +73,9 @@ const verifyToken = (req, res, next) => {
   return next();
 };
 
-// --- API Endpoints (Unchanged) ---
+// --- API Endpoints ---
 app.post('/register', async (req, res) => {
+  // (This endpoint is unchanged)
   try {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -104,7 +118,12 @@ app.post('/login', async (req, res) => {
     res.status(200).json({
       message: "Login successful!",
       token: token,
-      user: { id: user._id, username: user.username }
+      user: { 
+        id: user._id, 
+        username: user.username,
+        // --- *** NEW: Send avatarUrl on login *** ---
+        avatarUrl: user.avatarUrl 
+      }
     });
   } catch (err) {
     console.error(err);
@@ -114,7 +133,8 @@ app.post('/login', async (req, res) => {
 
 app.get('/api/users', verifyToken, async (req, res) => {
   try {
-    const users = await User.find({ _id: { $ne: req.user.id } }).select('username _id');
+    // --- *** NEW: Also select the avatarUrl *** ---
+    const users = await User.find({ _id: { $ne: req.user.id } }).select('username _id avatarUrl');
     res.json(users);
   } catch (err) {
     console.error(err);
@@ -123,6 +143,7 @@ app.get('/api/users', verifyToken, async (req, res) => {
 });
 
 app.get('/api/messages/:otherUserId', verifyToken, async (req, res) => {
+  // (This endpoint is unchanged)
   try {
     const myId = req.user.id;
     const otherUserId = req.params.otherUserId;
@@ -139,15 +160,48 @@ app.get('/api/messages/:otherUserId', verifyToken, async (req, res) => {
   }
 });
 
+// --- *** NEW: API Endpoint for Avatar Upload *** ---
+app.post('/api/upload-avatar', verifyToken, async (req, res) => {
+  try {
+    const { dataUrl } = req.body; // We'll send the image as a Data URL string
+    if (!dataUrl) {
+      return res.status(400).json({ message: "No image data provided." });
+    }
 
-// --- Socket.io Logic ---
-const userSocketMap = new Map();
+    // Upload to Cloudinary
+    const result = await cloudinary.uploader.upload(dataUrl, {
+      folder: "chatnow_avatars", // A folder to keep things organized
+      public_id: req.user.id,     // Use the user's ID as a unique filename
+      overwrite: true,            // Replace the old image if one exists
+      transformation: [           // Auto-crop to a square
+        {width: 200, height: 200, gravity: "face", crop: "fill"}
+      ]
+    });
 
-const io = new Server(server, {
-  cors: {
-    origin: CLIENT_URL, // Use the variable here
-    methods: ["GET", "POST"]
+    const avatarUrl = result.secure_url; // Get the URL from Cloudinary
+
+    // Update user in our database
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      { avatarUrl },
+      { new: true } // Return the updated document
+    ).select('-password'); // Don't send the password back!
+
+    res.status(200).json({ 
+      message: "Avatar updated!", 
+      user: updatedUser // Send back the full updated user object
+    });
+  } catch (err) {
+    console.error('Error uploading avatar:', err);
+    res.status(500).json({ message: "Server error during upload." });
   }
+});
+
+
+// --- Socket.io Logic (Unchanged) ---
+const userSocketMap = new Map();
+const io = new Server(server, {
+  cors: { origin: CLIENT_URL, methods: ["GET", "POST"] }
 });
 
 function broadcastOnlineUsers() {
@@ -158,7 +212,6 @@ function broadcastOnlineUsers() {
 
 io.on('connection', (socket) => {
   console.log(`A user connected: ${socket.id}`);
-
   socket.on('authenticate', (token) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -178,17 +231,15 @@ io.on('connection', (socket) => {
       const senderId = decoded.id;
       const senderUsername = decoded.username;
       const recipient = await User.findById(recipientId);
-      if (!recipient) {
-        throw new Error("Recipient not found");
-      }
+      if (!recipient) throw new Error("Recipient not found");
+      
       const newMessage = new Message({
-        senderId,
-        recipientId,
-        text,
+        senderId, recipientId, text,
         senderUsername: senderUsername,
         recipientUsername: recipient.username
       });
       await newMessage.save();
+
       const recipientSocketId = userSocketMap.get(recipientId);
       if (recipientSocketId) {
         io.to(recipientSocketId).emit('receive_message', newMessage);
@@ -217,9 +268,10 @@ io.on('connection', (socket) => {
 });
 
 // --- Start Server ---
-// --- *** NEW: Production-Ready Port *** ---
-// Render will give us a PORT environment variable.
 const PORT = process.env.PORT || 5001;
 server.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`);
 });
+
+
+
